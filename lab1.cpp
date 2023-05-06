@@ -3,6 +3,7 @@
 #include <unordered_map>
 #include <fstream>
 #include <vector>
+#include <stack>
 
 using namespace std;
 
@@ -169,61 +170,128 @@ string analyzeLine(string line) {
 //  tokens
 vector<string> tokens;
 
-// 词法分析
 void lex(ifstream &file) {
     string code;
+    stack<bool> comment_stack;
 
     while (getline(file, code)) {
         int i = 0;
         while (i < code.size()) {
-            if (code[i] == '/' && code[i + 1] == '/') {             // 遇到单行注释，则直接跳过，直到读取一个非空行
-                while (getline(file, code) && (code[0] != '\n' && code[0] != '\r'));
-            }
-            if (code[i] == '/' && code[i + 1] == '*') {
-                int comment_nest = 1;                               // 追踪注释的嵌套层数
-                while (true) {
-                    while (i < code.size() && code[i] != '\n') {    // 在当前行追踪
-                        if (code[i] == '*')
-                            if (code[i + 1] == '/')
-                                comment_nest--;
-                            else if (code[i] == '/' && code[i + 1] == '*')
-                                comment_nest++;
+            if (!comment_stack.empty()) {                       // 在多行注释中
+                if (code[i] == '*' && i < code.size() - 1 && code[i + 1] == '/') {
+                    comment_stack.pop();                        // 多行注释结束
+                    i += 2;
+                } else {
+                    i++;
+                }
+            } else {
+                if (code[i] == '/' && i < code.size() - 1) {
+                    if (code[i + 1] == '/') {                   // 单行注释
+                        break;
+                    } else if (code[i + 1] == '*') {            // 多行注释
+                        comment_stack.push(true);
+                        i += 2;
+                    } else {
+                        tokens.push_back(string(1, code[i]));   // 运算符和分隔符
                         i++;
                     }
-                    if (comment_nest == 0) break;                   // 如果在当前行的嵌套注释结束，则结束多行注释的判断。否则读取下一行
-                    getline(file, code);
-                    if (file.eof()) break;
-                    i = 0;
-                }
-                if (comment_nest != 0) {                            // 添加的逻辑
-                    cout << "未正确多行注释!" << endl;
-                    exit(1);
-                }
-            } else if (isalpha(code[i])) {                          // 标识符
-                string id;
-                while (i < code.size() && isalnum(code[i])) {
-                    id += code[i];
+                } else if (isalpha(code[i])) {                  // 标识符
+                    string id;
+                    while (i < code.size() && isalnum(code[i])) {
+                        id += code[i];
+                        i++;
+                    }
+                    tokens.push_back(id);
+                } else if (isdigit(code[i]) || code[i] == 'x' || code[i] == 'X' || code[i] == '0') {   // 数字
+                    string num;
+                    while (i < code.size() &&
+                           (isdigit(code[i]) || (code[i] >= 'a' && code[i] <= 'f') ||
+                            (code[i] >= 'A' && code[i] <= 'F'))) {
+                        num += code[i];
+                        i++;
+                    }
+                    tokens.push_back(num);
+                } else if (code[i] == ' ' || code[i] == '\n' || code[i] == '\r') {
+                    i++;
+                } else {                                        // 运算符和分隔符
+                    tokens.push_back(string(1, code[i]));
                     i++;
                 }
-                tokens.push_back(id);
-            } else if (isdigit(code[i]) || code[i] == 'x' || code[i] == 'X' || code[i] == '0') {   // 数字
-                string num;
-                while (i < code.size() &&
-                       (isdigit(code[i]) || (code[i] >= 'a' && code[i] <= 'f') || (code[i] >= 'A' && code[i] <= 'F'))) {
-                    num += code[i];
-                    i++;
-                }
-                tokens.push_back(num);
-            } else if (code[i] == ' ' || code[i] == '\n' || code[i] == '\r') {
-                i++;
-            } else {                                                // 运算符和分隔符
-                string op(1, code[i]);
-                tokens.push_back(op);
-                i++;
             }
         }
     }
+
+    if (!comment_stack.empty() && comment_stack.top()) {
+        cout << "未正确多行注释!" << endl;
+        exit(1);
+    }
 }
+
+
+
+
+//// 词法分析
+//void lex(ifstream &file) {
+//    string code;
+//
+//    while (getline(file, code)) {
+//        int i = 0;
+//        while (i < code.size()) {
+//            if (code[i] == '/' && code[i + 1] == '/') {             // 遇到单行注释，则直接跳过，直到读取一个非空行
+//                do {
+//                    getline(file, code);
+//                } while (code[0] == '\n' || code[0] == '\r');
+//                i = 0;
+//            }
+//            if (code[i] == '/' && code[i + 1] == '*') {
+//                int comment_nest = 1;
+//                int j = i;
+//
+//                while (comment_nest > 0) {
+//                    while (j < code.size() && code[j] != '\n') {
+//                        if (code[j] == '*') {
+//                            if (code[j + 1] == '/') {
+//                                comment_nest--;
+//                            } else if (code[j + 1] == '*')
+//                                comment_nest++;
+//                        }
+//                        j++;
+//                    }
+//                    if (file.eof()) {
+//                        cout << "多行注释未关闭!" << endl;
+//                        exit(1);
+//                    }
+//                    getline(file, code);
+//                    j = 0;
+//                }
+//                i = j;
+//            }
+//            if (isalpha(code[i])) {                          // 标识符
+//                string id;
+//                while (i < code.size() && isalnum(code[i])) {
+//                    id += code[i];
+//                    i++;
+//                }
+//                tokens.push_back(id);
+//
+//            } else if (isdigit(code[i]) || code[i] == 'x' || code[i] == 'X' || code[i] == '0') {   // 数字
+//                string num;
+//                while (i < code.size() &&
+//                       (isdigit(code[i]) || (code[i] >= 'a' && code[i] <= 'f') || (code[i] >= 'A' && code[i] <= 'F'))) {
+//                    num += code[i];
+//                    i++;
+//                }
+//                tokens.push_back(num);
+//            } else if (code[i] == ' ' || code[i] == '\n' || code[i] == '\r') {
+//                i++;
+//            } else {                                                // 运算符和分隔符
+//                string op(1, code[i]);
+//                tokens.push_back(op);
+//                i++;
+//            }
+//        }
+//    }
+//}
 
 // 错误处理
 void error() {
